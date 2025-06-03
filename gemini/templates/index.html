@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Tư Vấn Tâm Lý</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h3>Chatbot Tư Vấn Tâm Lý</h3>
+        </div>
+        <div class="chat-box" id="chat-box">
+            <div class="message bot">Chào bạn! Tôi là chatbot tư vấn tâm lý. Bạn có muốn chia sẻ điều gì không?</div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="user-input" placeholder="Nhập tin nhắn của bạn...">
+            <button id="send-button">Gửi</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
