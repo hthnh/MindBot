@@ -1,50 +1,101 @@
 document.addEventListener('DOMContentLoaded', () => {
     const chatBox = document.getElementById('chat-box');
-    const userInput = document.getElementById('user-input');
+    const userInput = document.getElementById('user-input'); // Đây là textarea
     const sendButton = document.getElementById('send-button');
+    const themeToggleButton = document.getElementById('theme-toggle'); // Nút chuyển đổi chủ đề
 
-    // Mảng để lưu trữ lịch sử cuộc trò chuyện
-    // Mỗi phần tử là một đối tượng { role: 'user'/'model', parts: [{ text: '...' }] }
-    // Giống định dạng yêu cầu của Gemini API
-    const chatHistory = [
-        // Tin nhắn khởi tạo của bot (nếu có, thêm vào đây để Gemini biết ngữ cảnh)
-        // Đây sẽ được xử lý ở backend để giữ System Instruction
-        // { role: 'model', parts: [{ text: 'Chào bạn! Tôi là chatbot tư vấn tâm lý. Bạn có muốn chia sẻ điều gì không?' }] }
-    ];
+    const chatHistory = [];
+    let sessionS = { "state": "normal" };
 
     // Khởi tạo tin nhắn đầu tiên từ bot
-    addMessageToChat('Chào bạn! Tôi là chatbot tư vấn tâm lý. Bạn có muốn chia sẻ điều gì không?', 'bot');
+    // Thêm tin nhắn ban đầu không có hiệu ứng gõ phím (hoặc bạn có thể thêm nếu muốn)
+    const initialMessageElement = document.querySelector('.message.initial-message');
+    if (initialMessageElement) {
+        initialMessageElement.style.opacity = '1'; // Hiển thị ngay
+    }
+    // Nếu muốn tin nhắn đầu tiên cũng có hiệu ứng gõ, hãy gọi addMessageToChat với nó
+    addMessageToChat("Chào bạn, mình là MindBot - một người bạn tâm lý luôn sẵn sàng lắng nghe.\nNếu bạn muốn, chúng ta có thể hít thở nhẹ một chút để thư giãn, rồi mình sẽ cùng trò chuyện nhé.", "bot",true);
 
-    function addMessageToChat(message, sender) {
+    // Hàm thêm tin nhắn vào chatbox với hiệu ứng gõ phím
+    function addMessageToChat(message, sender, typeEffect = false) {
         const messageElement = document.createElement('div');
         messageElement.classList.add('message', sender);
-        messageElement.textContent = message;
         chatBox.appendChild(messageElement);
         chatBox.scrollTop = chatBox.scrollHeight; // Cuộn xuống cuối khung chat
+
+        if (typeEffect) {
+            let i = 0;
+            // Hàm này sẽ hiển thị từng ký tự một
+            const typingInterval = setInterval(() => {
+                if (i < message.length) {
+                    messageElement.textContent += message.charAt(i);
+                    i++;
+                    chatBox.scrollTop = chatBox.scrollHeight; // Cuộn xuống mỗi khi thêm ký tự
+                } else {
+                    clearInterval(typingInterval);
+                }
+            }, 30); // Tốc độ gõ: 30ms mỗi ký tự
+        } else {
+            messageElement.textContent = message;
+            messageElement.style.opacity = '1'; // Đảm bảo tin nhắn hiện lên ngay lập tức
+        }
+    }
+
+    // Hàm điều chỉnh chiều cao của textarea
+    function autoResizeTextarea() {
+        userInput.style.height = 'auto'; // Reset chiều cao về auto để tính toán lại
+        userInput.style.height = userInput.scrollHeight + 'px'; // Đặt chiều cao bằng scrollHeight
+        chatBox.scrollTop = chatBox.scrollHeight; // Cuộn xuống cuối khung chat khi textarea thay đổi
+    }
+
+    // Gán sự kiện input cho textarea để tự động điều chỉnh chiều cao
+    userInput.addEventListener('input', autoResizeTextarea);
+
+    // Xử lý chuyển đổi chế độ sáng/tối
+    themeToggleButton.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        // Lưu trạng thái vào localStorage để ghi nhớ lựa chọn của người dùng
+        if (document.body.classList.contains('dark-mode')) {
+            localStorage.setItem('theme', 'dark');
+            themeToggleButton.textContent = '☀️'; // Đổi biểu tượng sang mặt trời
+        } else {
+            localStorage.setItem('theme', 'light');
+            themeToggleButton.textContent = '🌙'; // Đổi biểu tượng sang mặt trăng
+        }
+    });
+
+    // Kiểm tra trạng thái chủ đề đã lưu khi tải trang
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        themeToggleButton.textContent = '☀️';
+    } else {
+        themeToggleButton.textContent = '🌙';
     }
 
     async function sendMessage() {
         const userMessageText = userInput.value.trim();
         if (userMessageText === '') return;
 
-        addMessageToChat(userMessageText, 'user');
+        // Thêm tin nhắn người dùng (không có hiệu ứng gõ)
+        addMessageToChat(userMessageText, 'user', false); 
         userInput.value = ''; // Xóa nội dung input
+        autoResizeTextarea(); // Reset chiều cao textarea
 
         // Thêm tin nhắn của người dùng vào lịch sử
         chatHistory.push({ role: 'user', parts: [{ text: userMessageText }] });
 
-        // Gửi toàn bộ lịch sử cuộc trò chuyện đến server Flask
+        // Gửi toàn bộ lịch sử cuộc trò chuyện và biến sessionS hiện tại đến server Flask
         try {
             const response = await fetch('/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ history: chatHistory }), // Gửi toàn bộ lịch sử
+                body: JSON.stringify({ history: chatHistory, session: sessionS }),
             });
 
             if (!response.ok) {
-                // Xử lý lỗi từ server (ví dụ: lỗi quota)
                 const errorData = await response.json();
                 throw new Error(`Server error! status: ${response.status}, message: ${errorData.response}`);
             }
@@ -52,15 +103,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             const botResponseText = data.response;
 
-            addMessageToChat(botResponseText, 'bot');
+            if (data.session) {
+                sessionS = data.session;
+                console.log('Session updated:', sessionS);
+            }
+
+            // Thêm phản hồi của bot với hiệu ứng gõ phím
+            addMessageToChat(botResponseText, 'bot', true); 
             // Thêm phản hồi của bot vào lịch sử để duy trì ngữ cảnh
             chatHistory.push({ role: 'model', parts: [{ text: botResponseText }] });
 
         } catch (error) {
             console.error('Lỗi khi gửi tin nhắn:', error);
             addMessageToChat(`Xin lỗi, đã có lỗi xảy ra. ${error.message}. Vui lòng thử lại sau.`, 'bot');
-            // Nếu có lỗi, bạn có thể cân nhắc xóa tin nhắn người dùng cuối cùng khỏi lịch sử
-            // để người dùng có thể thử lại mà không bị lặp lại lỗi.
             chatHistory.pop(); // Xóa tin nhắn người dùng vừa gửi nếu có lỗi
         }
     }
@@ -68,7 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton.addEventListener('click', sendMessage);
 
     userInput.addEventListener('keypress', (event) => {
-        if (event.key === 'Enter') {
+        if (event.key === 'Enter' && !event.shiftKey) { // Bấm Enter để gửi, Shift + Enter để xuống dòng
+            event.preventDefault(); // Ngăn hành vi mặc định của Enter (tạo dòng mới)
             sendMessage();
         }
     });
